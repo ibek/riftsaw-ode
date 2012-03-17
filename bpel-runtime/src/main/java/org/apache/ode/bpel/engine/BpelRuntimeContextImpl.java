@@ -25,10 +25,15 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 
+import javax.wsdl.Binding;
+import javax.wsdl.BindingOperation;
 import javax.wsdl.Fault;
 import javax.wsdl.Operation;
+import javax.wsdl.extensions.ExtensibilityElement;
+import javax.wsdl.extensions.UnknownExtensibilityElement;
 import javax.xml.namespace.QName;
 
 import org.apache.commons.logging.Log;
@@ -85,6 +90,7 @@ import org.apache.ode.bpel.runtime.channels.FaultData;
 import org.apache.ode.bpel.runtime.channels.InvokeResponseChannel;
 import org.apache.ode.bpel.runtime.channels.PickResponseChannel;
 import org.apache.ode.bpel.runtime.channels.TimerResponseChannel;
+import org.apache.ode.bpel.wstx.DistributedTransaction;
 import org.apache.ode.dao.bpel.CorrelationSetDAO;
 import org.apache.ode.dao.bpel.CorrelatorDAO;
 import org.apache.ode.dao.bpel.MessageDAO;
@@ -136,6 +142,8 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
 
     /** Five second maximum for continous execution. */
     private long _maxReductionTimeMs = 2000000;
+    
+    private DistributedTransaction _distributedTransaction;
 
     public BpelRuntimeContextImpl(BpelProcess bpelProcess, ProcessInstanceDAO dao, PROCESS PROCESS,
                                   MyRoleMessageExchangeImpl instantiatingMessageExchange) {
@@ -775,7 +783,7 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
             BpelProcess.__log.debug("INVOKING PARTNER: partnerLink=" + partnerLink +
                     ", op=" + operation.getName() + " channel=" + channel + ")");
         }
-
+        
         // prepare event
         ProcessMessageExchangeEvent evt = new ProcessMessageExchangeEvent();
         evt.setOperation(operation.getName());
@@ -827,6 +835,20 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
         Endpoint partnerEndpoint = _bpelProcess.getInitialPartnerRoleEndpoint(partnerLink.partnerLink);
         if (getConfigForPartnerLink(partnerLink.partnerLink).usePeer2Peer && partnerEndpoint != null)
             p2pProcesses = _bpelProcess.getEngine().route(partnerEndpoint.serviceName, mex.getRequest());
+
+        if(_distributedTransaction == null){
+          _distributedTransaction = DistributedTransaction.checkOperation(operation, _bpelProcess.getConf().getDefinitionForService(partnerEndpoint.serviceName).getBindings().values());
+          if(_distributedTransaction != null){
+            if (BpelProcess.__log.isDebugEnabled()) {
+              __log.debug("Creating distributed transaction ...");
+            }
+            try{
+              _distributedTransaction.begin();
+            }catch (Exception e) {
+              __log.debug("Error while creating distributed transaction. " + e.getMessage());
+            }
+          }
+        }
 
         if (p2pProcesses != null && !p2pProcesses.isEmpty()) {
             // Creating a my mex using the same message id as partner mex to "pipe" them
