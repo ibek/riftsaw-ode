@@ -20,6 +20,7 @@ package org.apache.ode.bpel.engine;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.OutputStreamWriter;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -35,6 +36,11 @@ import javax.wsdl.Operation;
 import javax.wsdl.extensions.ExtensibilityElement;
 import javax.wsdl.extensions.UnknownExtensibilityElement;
 import javax.xml.namespace.QName;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -90,7 +96,7 @@ import org.apache.ode.bpel.runtime.channels.FaultData;
 import org.apache.ode.bpel.runtime.channels.InvokeResponseChannel;
 import org.apache.ode.bpel.runtime.channels.PickResponseChannel;
 import org.apache.ode.bpel.runtime.channels.TimerResponseChannel;
-import org.apache.ode.bpel.wstx.DistributedTransaction;
+import org.apache.ode.bpel.wstx.WebServiceTransaction;
 import org.apache.ode.dao.bpel.CorrelationSetDAO;
 import org.apache.ode.dao.bpel.CorrelatorDAO;
 import org.apache.ode.dao.bpel.MessageDAO;
@@ -109,10 +115,19 @@ import org.apache.ode.utils.DOMUtils;
 import org.apache.ode.utils.GUID;
 import org.apache.ode.utils.Namespaces;
 import org.apache.ode.utils.ObjectPrinter;
+import org.oasis_open.docs.ws_tx.wscoor._2006._06.CoordinationContext;
+import org.oasis_open.docs.ws_tx.wscoor._2006._06.CoordinationContextType;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+
+import com.arjuna.mw.wsc11.context.Context;
+import com.arjuna.mw.wst11.TransactionManager;
+import com.arjuna.mwlabs.wst11.at.ContextImple;
+import com.arjuna.mwlabs.wst11.at.context.TxContextImple;
+import com.arjuna.webservices11.wscoor.CoordinationConstants;
+import com.arjuna.wst.WrongStateException;
 
 public class BpelRuntimeContextImpl implements BpelRuntimeContext {
 
@@ -143,7 +158,7 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
     /** Five second maximum for continous execution. */
     private long _maxReductionTimeMs = 2000000;
     
-    private DistributedTransaction _distributedTransaction;
+    private WebServiceTransaction _wst;
 
     public BpelRuntimeContextImpl(BpelProcess bpelProcess, ProcessInstanceDAO dao, PROCESS PROCESS,
                                   MyRoleMessageExchangeImpl instantiatingMessageExchange) {
@@ -836,17 +851,30 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
         if (getConfigForPartnerLink(partnerLink.partnerLink).usePeer2Peer && partnerEndpoint != null)
             p2pProcesses = _bpelProcess.getEngine().route(partnerEndpoint.serviceName, mex.getRequest());
 
-        if(_distributedTransaction == null){
-          _distributedTransaction = DistributedTransaction.checkOperation(operation, _bpelProcess.getConf().getDefinitionForService(partnerEndpoint.serviceName).getBindings().values());
-          if(_distributedTransaction != null){
-            if (BpelProcess.__log.isDebugEnabled()) {
+        if(_wst == null){
+          // Creating a distributed transaction if the operation has an AtomicTransaction or BusinessActivity assertion
+            _wst = WebServiceTransaction.checkOperation(operation, _bpelProcess.getConf().getDefinitionForService(partnerEndpoint.serviceName).getBindings().values());
+            if(_wst != null){
               __log.debug("Creating distributed transaction ...");
+              try{
+                _wst.begin();
+                __log.debug("Distributed transaction has been create with id = " + _wst.getTransactionIdentifier());
+              }catch(WrongStateException wse){
+                __log.error("There is already created web service transaction.");
+              }catch (Exception e) {
+                e.printStackTrace();
+                __log.error("Error while creating distributed transaction. " + e.getMessage());
+              }
             }
-            try{
-              _distributedTransaction.begin();
-            }catch (Exception e) {
-              __log.debug("Error while creating distributed transaction. " + e.getMessage());
-            }
+        }
+
+        if(_wst != null){
+          try{
+            Element headerElement = message.getHeader();
+            headerElement = _wst.putCoordinationContext(headerElement);
+            message.setHeader(headerElement);
+          }catch (Exception e) {
+            e.printStackTrace();
           }
         }
 
@@ -892,6 +920,23 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
                 mex.setStatus(MessageExchange.Status.REQUEST);
                 // Assuming an unreliable protocol, we schedule a task to check if recovery mode will be needed
                 scheduleInvokeCheck(mex, partnerLink.partnerLink, false);
+                
+                if (__log.isDebugEnabled()) {
+                  try{
+                    TransformerFactory tf = TransformerFactory.newInstance();
+                    Transformer transformer = tf.newTransformer();
+                    transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "no");
+                    transformer.setOutputProperty(OutputKeys.METHOD, "xml");
+                    transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+                    transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
+                    transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "4");
+                    transformer.transform(new DOMSource(mex.getRequest().getHeaderParts().values().iterator().next().getOwnerDocument()), 
+                         new StreamResult(new OutputStreamWriter(System.out, "UTF-8")));
+                  }catch (Exception e) {
+                    // TODO: handle exception
+                  }
+                }
+                
                 _bpelProcess._engine._contexts.mexContext.invokePartner(mex);
             } else {
                 __log.error("Couldn't find endpoint for partner EPR " + DOMUtils.domToString(partnerEPR));
