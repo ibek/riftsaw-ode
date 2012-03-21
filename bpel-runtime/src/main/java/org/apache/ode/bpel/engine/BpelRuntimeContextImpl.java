@@ -96,6 +96,7 @@ import org.apache.ode.bpel.runtime.channels.FaultData;
 import org.apache.ode.bpel.runtime.channels.InvokeResponseChannel;
 import org.apache.ode.bpel.runtime.channels.PickResponseChannel;
 import org.apache.ode.bpel.runtime.channels.TimerResponseChannel;
+import org.apache.ode.bpel.wstx.AtomicTransaction;
 import org.apache.ode.bpel.wstx.WebServiceTransaction;
 import org.apache.ode.dao.bpel.CorrelationSetDAO;
 import org.apache.ode.dao.bpel.CorrelatorDAO;
@@ -115,19 +116,10 @@ import org.apache.ode.utils.DOMUtils;
 import org.apache.ode.utils.GUID;
 import org.apache.ode.utils.Namespaces;
 import org.apache.ode.utils.ObjectPrinter;
-import org.oasis_open.docs.ws_tx.wscoor._2006._06.CoordinationContext;
-import org.oasis_open.docs.ws_tx.wscoor._2006._06.CoordinationContextType;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
-
-import com.arjuna.mw.wsc11.context.Context;
-import com.arjuna.mw.wst11.TransactionManager;
-import com.arjuna.mwlabs.wst11.at.ContextImple;
-import com.arjuna.mwlabs.wst11.at.context.TxContextImple;
-import com.arjuna.webservices11.wscoor.CoordinationConstants;
-import com.arjuna.wst.WrongStateException;
 
 public class BpelRuntimeContextImpl implements BpelRuntimeContext {
 
@@ -267,6 +259,14 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
             public void afterCompletion(boolean success) {
             }
             public void beforeCompletion() { 
+                if(_wst != null && _wst.isActive()){
+                    try{
+                        _wst.rollback();
+                    }catch (Exception e) {
+                        __log.error("Web service transaction wasn't aborted.");
+                        e.printStackTrace();
+                    }
+                }
                 _dao.delete(_bpelProcess.getCleanupCategories(false), false);
             }
         });
@@ -296,6 +296,14 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
             public void afterCompletion(boolean success) {
             }
             public void beforeCompletion() { 
+                if(_wst != null && _wst.isActive()){
+                    try{
+                        _wst.commit();
+                    }catch (Exception e) {
+                        __log.error("Web service transaction wasn't commited.");
+                        e.printStackTrace();
+                    }
+                }
                 _dao.delete(_bpelProcess.getCleanupCategories(true), false);
             }
         });
@@ -853,14 +861,14 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
 
         if(_wst == null){
           // Creating a distributed transaction if the operation has an AtomicTransaction or BusinessActivity assertion
-            _wst = WebServiceTransaction.checkOperation(operation, _bpelProcess.getConf().getDefinitionForService(partnerEndpoint.serviceName).getBindings().values());
+            _wst = checkWSTAssertion(operation, _bpelProcess.getConf().getDefinitionForService(partnerEndpoint.serviceName).getBindings().values());
             if(_wst != null){
               __log.debug("Creating distributed transaction ...");
               try{
                 _wst.begin();
-                __log.debug("Distributed transaction has been create with id = " + _wst.getTransactionIdentifier());
-              }catch(WrongStateException wse){
-                __log.error("There is already created web service transaction.");
+                __log.debug("Distributed transaction has been created with id = " + _wst.getTransactionIdentifier());
+              //}catch( wse){
+              //  __log.error("There is already created web service transaction.");
               }catch (Exception e) {
                 e.printStackTrace();
                 __log.error("Error while creating distributed transaction. " + e.getMessage());
@@ -921,22 +929,6 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
                 // Assuming an unreliable protocol, we schedule a task to check if recovery mode will be needed
                 scheduleInvokeCheck(mex, partnerLink.partnerLink, false);
                 
-                if (__log.isDebugEnabled()) {
-                  try{
-                    TransformerFactory tf = TransformerFactory.newInstance();
-                    Transformer transformer = tf.newTransformer();
-                    transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "no");
-                    transformer.setOutputProperty(OutputKeys.METHOD, "xml");
-                    transformer.setOutputProperty(OutputKeys.INDENT, "yes");
-                    transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
-                    transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "4");
-                    transformer.transform(new DOMSource(mex.getRequest().getHeaderParts().values().iterator().next().getOwnerDocument()), 
-                         new StreamResult(new OutputStreamWriter(System.out, "UTF-8")));
-                  }catch (Exception e) {
-                    // TODO: handle exception
-                  }
-                }
-                
                 _bpelProcess._engine._contexts.mexContext.invokePartner(mex);
             } else {
                 __log.error("Couldn't find endpoint for partner EPR " + DOMUtils.domToString(partnerEPR));
@@ -974,6 +966,41 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
 
         return mexDao.getMessageExchangeId();
     }
+    
+    @SuppressWarnings("unchecked")
+    private WebServiceTransaction checkWSTAssertion(Operation operation, Collection<Binding> bindings){
+        Iterator<Binding> i = bindings.iterator();
+        while(i.hasNext()){
+          Binding b = i.next();
+          List<BindingOperation> bolist = b.getBindingOperations();
+          for(BindingOperation bo : bolist){
+            if(bo.getOperation().getName().compareTo(operation.getName()) != 0)
+              continue;
+            List<ExtensibilityElement> eelist = bo.getExtensibilityElements();
+            for(ExtensibilityElement ee : eelist){
+              if (! (ee instanceof UnknownExtensibilityElement))
+                continue;
+              UnknownExtensibilityElement uee = (UnknownExtensibilityElement) ee;
+              if(uee.getElementType().getLocalPart().equals("PolicyReference")){
+                String uri = uee.getElement().getAttribute("URI").substring(1);
+                NodeList policyNodeList = uee.getElement().getOwnerDocument().getElementsByTagNameNS("*", "Policy");
+                for (int j = 0; j < policyNodeList.getLength(); j++) {
+                    Element element = (Element) policyNodeList.item(j);
+                    String refUri = element.getAttributeNS("http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd", "Id");
+                    if (refUri != null && refUri.equals(uri)) {
+                        NodeList wsat = element.getElementsByTagNameNS("http://docs.oasis-open.org/ws-tx/wsat/2006/06","ATAssertion");
+                        if(wsat != null && wsat.getLength() == 1){
+                          return new AtomicTransaction();
+                        }
+                        return null;
+                    }
+                }
+              }
+            }
+          }
+        }
+        return null;
+      }
     
     // enable extensibility
     protected PartnerRoleMessageExchangeImpl createPartnerRoleMessageExchangeImpl(MessageExchangeDAO mexDao,

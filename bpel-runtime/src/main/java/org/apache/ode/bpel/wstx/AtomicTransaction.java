@@ -1,6 +1,5 @@
 package org.apache.ode.bpel.wstx;
 
-import org.apache.ode.utils.DOMUtils;
 import org.oasis_open.docs.ws_tx.wscoor._2006._06.CoordinationContextType;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -17,14 +16,10 @@ import com.arjuna.wst.TransactionRolledBackException;
 import com.arjuna.wst.UnknownTransactionException;
 import com.arjuna.wst.WrongStateException;
 
-public class AtomicTransaction extends WebServiceTransaction {
+public class AtomicTransaction implements WebServiceTransaction {
 
   protected UserTransaction _tx;
   protected UserCoordinator _userCoord;
-  
-  protected AtomicTransaction(){
-    
-  }
   
   public void begin() throws WrongStateException, SystemException {
     _tx = UserTransaction.getUserTransaction();
@@ -55,7 +50,6 @@ public class AtomicTransaction extends WebServiceTransaction {
     _tx.rollback();
   }
 
-  @Override
   public Element putCoordinationContext(Element headerElement) throws SystemException {
     final TxContextImple txContext = (TxContextImple)TransactionManager.getTransactionManager().currentTransaction();
     CoordinationContextType ctx = txContext.context().getCoordinationContext();

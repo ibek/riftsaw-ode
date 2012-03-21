@@ -7,7 +7,7 @@ import com.arjuna.wst.TransactionRolledBackException;
 import com.arjuna.wst.UnknownTransactionException;
 import com.arjuna.wst.WrongStateException;
 
-public class BusinessActivity extends WebServiceTransaction {
+public class BusinessActivity implements WebServiceTransaction {
   
   protected BusinessActivity(){
     
@@ -33,13 +33,11 @@ public class BusinessActivity extends WebServiceTransaction {
     
   }
 
-  @Override
   public String getTransactionIdentifier() {
     // TODO Auto-generated method stub
     return null;
   }
 
-  @Override
   public Element putCoordinationContext(Element headerElement) throws SystemException {
     // TODO Auto-generated method stub
     return null;
