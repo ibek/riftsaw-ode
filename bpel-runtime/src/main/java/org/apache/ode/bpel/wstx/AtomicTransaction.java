@@ -19,27 +19,27 @@ import com.arjuna.wst.WrongStateException;
 public class AtomicTransaction implements WebServiceTransaction {
 
   protected UserTransaction _tx;
-  protected UserCoordinator _userCoord;
+  protected boolean active;
+  
+  public AtomicTransaction(){
+    active = false;
+  }
   
   public void begin() throws WrongStateException, SystemException {
     _tx = UserTransaction.getUserTransaction();
     if(_tx == null)
       throw new SystemException("Distributed transaction has not been created. Check that JBoss XTS is runnning.");
     _tx.begin();
-    try{
-      _userCoord = UserCoordinatorFactory.userCoordinator();
-      _userCoord.begin("");
-    }catch (Exception e) {
-      e.printStackTrace();
-    }
+    active = true;
   }
 
   public void commit() throws SecurityException, TransactionRolledBackException, UnknownTransactionException, SystemException, WrongStateException {
+    active = false;
     _tx.commit();
   }
 
   public boolean isActive() {
-    return _tx != null;
+    return _tx != null && active;
   }
   
   public String getTransactionIdentifier(){
@@ -47,6 +47,7 @@ public class AtomicTransaction implements WebServiceTransaction {
   }
 
   public void rollback() throws SecurityException, UnknownTransactionException, SystemException, WrongStateException {
+    active = false;
     _tx.rollback();
   }
 
