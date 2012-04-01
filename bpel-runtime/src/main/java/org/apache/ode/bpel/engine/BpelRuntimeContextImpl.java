@@ -121,6 +121,8 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
+import com.arjuna.wst.TransactionRolledBackException;
+
 public class BpelRuntimeContextImpl implements BpelRuntimeContext {
 
     private static final Log __log = LogFactory.getLog(BpelRuntimeContextImpl.class);
@@ -263,7 +265,7 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
                     try{
                         _wst.rollback();
                     }catch (Exception e) {
-                        __log.error("Web service transaction wasn't aborted.");
+                        __log.error("Web service transaction wasn't properly aborted.");
                         e.printStackTrace();
                     }
                 }
@@ -276,6 +278,20 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
      * @see BpelRuntimeContext#completedOk()
      */
     public void completedOk() {
+        if(_wst != null && _wst.isActive()){
+            try{
+                _wst.commit();
+            }catch(TransactionRolledBackException e){
+              __log.info("Web service transaction was aborted");
+              /**QName fault = new QName(_bpelProcess.getOProcess().constants.qnUnknownFault.getNamespaceURI(), "WSTXRollback");
+              FaultData faultData = new FaultData(fault,_bpelProcess.getOProcess(),"Web service transaction was aborted.");
+              completedFault(faultData);
+              return;*/
+            }catch (Exception e) {
+              __log.error("Web service transaction wasn't commited.");
+            }
+        }
+      
         if (BpelProcess.__log.isDebugEnabled()) {
             BpelProcess.__log.debug("ProcessImpl " + _bpelProcess.getPID() + " completed OK.");
         }
@@ -295,15 +311,7 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
         _bpelProcess._engine._contexts.scheduler.registerSynchronizer(new Scheduler.Synchronizer() {
             public void afterCompletion(boolean success) {
             }
-            public void beforeCompletion() { 
-                if(_wst != null && _wst.isActive()){
-                    try{
-                        _wst.commit();
-                    }catch (Exception e) {
-                        __log.error("Web service transaction wasn't commited.");
-                        e.printStackTrace();
-                    }
-                }
+            public void beforeCompletion() {
                 _dao.delete(_bpelProcess.getCleanupCategories(true), false);
             }
         });
