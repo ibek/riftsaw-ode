@@ -259,7 +259,7 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
                     try{
                         _wst.rollback();
                     }catch (Exception e) {
-                        __log.error("Web service transaction wasn't properly aborted.");
+                        __log.error("Web service transaction wasn't properly aborted or it is already rolled back.");
                         e.printStackTrace();
                     }finally{
                         _bpelProcess.removeWebServiceTransaction(_dao.getInstanceId());
@@ -298,7 +298,7 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
                     try{
                         _wst.commit();
                     }catch (Exception e) {
-                        __log.error("Web service transaction wasn't commited.");
+                        __log.error("Web service transaction wasn't commited or it is already commited.");
                         e.printStackTrace();
                     }finally{
                         _bpelProcess.removeWebServiceTransaction(_dao.getInstanceId());

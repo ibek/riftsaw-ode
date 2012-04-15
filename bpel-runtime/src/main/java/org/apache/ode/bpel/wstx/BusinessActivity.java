@@ -17,64 +17,69 @@ import com.arjuna.wst.WrongStateException;
 
 public class BusinessActivity implements WebServiceTransaction {
 
-  private static final Log __log = LogFactory.getLog(BusinessActivity.class);
-  
-  protected UserBusinessActivity _uba;
-  protected boolean active;
-  
-  public BusinessActivity(){
-    active = false;
-  }
+    private static final Log __log = LogFactory.getLog(BusinessActivity.class);
 
-  public void begin() throws WrongStateException, SystemException{
-    _uba = UserBusinessActivity.getUserBusinessActivity();
-    if(_uba == null)
-      throw new SystemException("Distributed transaction has not been created. Check that JBoss XTS is runnning.");
-    _uba.begin();
-    active = true;
-  }
+    protected UserBusinessActivity _uba;
+    protected boolean active;
 
-  public void commit() throws SecurityException, UnknownTransactionException, SystemException, WrongStateException{
-    active = false;
-    _uba.cancel();
-  }
-
-  public boolean isActive() {
-    return _uba != null && active;
-  }
-
-  public void rollback() throws SecurityException, UnknownTransactionException, SystemException, WrongStateException{
-    active = false;
-    _uba.cancel();
-  }
-
-  public String getTransactionIdentifier() {
-    return _uba.transactionIdentifier();
-  }
-
-  public void resume() throws UnknownTransactionException, SystemException {
-    // TODO Auto-generated method stub
-    
-  }
-  
-  public void suspend() throws SystemException {
-    // TODO Auto-generated method stub
-    
-  }
-  
-  public Element putCoordinationContext(Element headerElement) throws UnknownTransactionException, SystemException {
-    final TxContextImple txContext = (TxContextImple)BusinessActivityManager.getBusinessActivityManager().currentTransaction();
-    CoordinationContextType ctx = txContext.context().getCoordinationContext();
-    try{
-      Document doc = headerElement.getOwnerDocument();
-      Element coord = doc.createElementNS(CoordinationConstants.WSCOOR_NAMESPACE, CoordinationConstants.WSCOOR_ELEMENT_COORDINATION_CONTEXT);
-      headerElement.appendChild(coord);
-      CoordinationContextHelper.serialise(ctx, headerElement);
-    }catch (Exception e) {
-      e.printStackTrace();
-      throw new SystemException("Coordination context has not been added to header.");
+    public BusinessActivity() {
+        active = false;
     }
-    return headerElement;
-  }
+
+    public void begin() throws WrongStateException, SystemException {
+        _uba = UserBusinessActivity.getUserBusinessActivity();
+        if (_uba == null)
+            throw new SystemException(
+                    "Distributed transaction has not been created. Check that JBoss XTS is runnning.");
+        _uba.begin();
+        active = true;
+    }
+
+    public void commit() throws SecurityException, UnknownTransactionException, SystemException,
+            WrongStateException {
+        active = false;
+        _uba.cancel();
+    }
+
+    public boolean isActive() {
+        return _uba != null && active;
+    }
+
+    public void rollback() throws SecurityException, UnknownTransactionException, SystemException,
+            WrongStateException {
+        active = false;
+        _uba.cancel();
+    }
+
+    public String getTransactionIdentifier() {
+        return _uba.transactionIdentifier();
+    }
+
+    public void resume() throws UnknownTransactionException, SystemException {
+        // TODO Auto-generated method stub
+
+    }
+
+    public void suspend() throws SystemException {
+        // TODO Auto-generated method stub
+
+    }
+
+    public Element putCoordinationContext(Element headerElement)
+            throws UnknownTransactionException, SystemException {
+        final TxContextImple txContext = (TxContextImple) BusinessActivityManager.getBusinessActivityManager().currentTransaction();
+        CoordinationContextType ctx = txContext.context().getCoordinationContext();
+        try {
+            Document doc = headerElement.getOwnerDocument();
+            Element coord = doc.createElementNS(CoordinationConstants.WSCOOR_NAMESPACE,
+                    CoordinationConstants.WSCOOR_ELEMENT_COORDINATION_CONTEXT);
+            headerElement.appendChild(coord);
+            CoordinationContextHelper.serialise(ctx, headerElement);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new SystemException("Coordination context has not been added to header.");
+        }
+        return headerElement;
+    }
 
 }
