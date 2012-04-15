@@ -1178,19 +1178,19 @@ public class BpelProcess {
         return Long.parseLong(_pid.getLocalPart().substring(_pid.getLocalPart().lastIndexOf('-') + 1));
     }
     
-    public WebServiceTransaction getWebServiceTransaction(Long instanceId){
-      return (_wstMap != null)?_wstMap.get(instanceId):null;
+    public WebServiceTransaction getWebServiceTransaction(Long instanceId) {
+        return (_wstMap != null)?_wstMap.get(instanceId):null;
     }
     
-    public void setWebServiceTransaction(Long instanceId, WebServiceTransaction wst){
-      if(_wstMap == null){
-          _wstMap = new HashMap<Long, WebServiceTransaction>();
-      }
-      _wstMap.put(instanceId, wst);
+    public void setWebServiceTransaction(Long instanceId, WebServiceTransaction wst) {
+        if (_wstMap == null) {
+            _wstMap = new HashMap<Long, WebServiceTransaction>();
+        }
+        _wstMap.put(instanceId, wst);
     }
     
-    public void removeWebServiceTransaction(Long instanceId){
-      _wstMap.remove(instanceId);
+    public void removeWebServiceTransaction(Long instanceId) {
+        _wstMap.remove(instanceId);
     }
     
 }

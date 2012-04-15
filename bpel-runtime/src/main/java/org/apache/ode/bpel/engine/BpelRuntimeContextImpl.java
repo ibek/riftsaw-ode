@@ -737,6 +737,16 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
             public void afterCompletion(boolean success) {
             }
             public void beforeCompletion() {
+                if(_wst != null && _wst.isActive()){
+                    try{
+                        _wst.rollback();
+                    }catch (Exception e) {
+                        __log.error("Web service transaction wasn't properly aborted or it is already rolled back.");
+                        e.printStackTrace();
+                    }finally{
+                        _bpelProcess.removeWebServiceTransaction(_dao.getInstanceId());
+                    }
+                }
                 _dao.delete(_bpelProcess.getCleanupCategories(false), false);
             }
         });
