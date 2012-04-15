@@ -1,11 +1,12 @@
 package org.apache.ode.bpel.wstx;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.oasis_open.docs.ws_tx.wscoor._2006._06.CoordinationContextType;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
-import com.arjuna.mw.wscf.model.twophase.api.UserCoordinator;
-import com.arjuna.mw.wscf11.model.twophase.UserCoordinatorFactory;
+import com.arjuna.mw.wst.TxContext;
 import com.arjuna.mw.wst11.TransactionManager;
 import com.arjuna.mw.wst11.UserTransaction;
 import com.arjuna.mw.wst11.common.CoordinationContextHelper;
@@ -18,52 +19,103 @@ import com.arjuna.wst.WrongStateException;
 
 public class AtomicTransaction implements WebServiceTransaction {
 
-  protected UserTransaction _tx;
-  protected boolean active;
-  
-  public AtomicTransaction(){
-    active = false;
-  }
-  
-  public void begin() throws WrongStateException, SystemException {
-    _tx = UserTransaction.getUserTransaction();
-    if(_tx == null)
-      throw new SystemException("Distributed transaction has not been created. Check that JBoss XTS is runnning.");
-    _tx.begin();
-    active = true;
-  }
+    private static final Log __log = LogFactory.getLog(AtomicTransaction.class);
 
-  public void commit() throws SecurityException, TransactionRolledBackException, UnknownTransactionException, SystemException, WrongStateException {
-    active = false;
-    _tx.commit();
-  }
+    protected UserTransaction _tx;
+    protected TxContext _txcontext;
+    protected boolean _active;
 
-  public boolean isActive() {
-    return _tx != null && active;
-  }
-  
-  public String getTransactionIdentifier(){
-    return _tx.transactionIdentifier();
-  }
-
-  public void rollback() throws SecurityException, UnknownTransactionException, SystemException, WrongStateException {
-    active = false;
-    _tx.rollback();
-  }
-
-  public Element putCoordinationContext(Element headerElement) throws SystemException {
-    final TxContextImple txContext = (TxContextImple)TransactionManager.getTransactionManager().currentTransaction();
-    CoordinationContextType ctx = txContext.context().getCoordinationContext();
-    try{
-      Document doc = headerElement.getOwnerDocument();
-      Element coord = doc.createElementNS(CoordinationConstants.WSCOOR_NAMESPACE, CoordinationConstants.WSCOOR_ELEMENT_COORDINATION_CONTEXT);
-      headerElement.appendChild(coord);
-      CoordinationContextHelper.serialise(ctx, headerElement);
-    }catch (Exception e) {
-      e.printStackTrace();
-      throw new SystemException("Coordination context has not been added to header.");
+    public AtomicTransaction() {
+        _active = false;
     }
-    return headerElement;
-  }
+
+    /**
+     * Begin of transaction must be performed with mutual exclusion in one thread
+     * because the registration service cannot begin more transactions in one time.
+     */
+    private static synchronized void begin(UserTransaction tx) throws WrongStateException, SystemException{
+        tx.begin();
+    }
+    
+    public void begin() throws WrongStateException, SystemException {
+        _tx = UserTransaction.getUserTransaction();
+        if (_tx == null)
+            throw new SystemException(
+                    "Distributed transaction has not been created. Check that JBoss XTS is runnning.");
+        try {
+            begin(_tx);
+        } catch (WrongStateException wse) {
+            TransactionManager.getTransactionManager().suspend(); // previous transaction will be resumed by another instance
+            _tx = UserTransaction.getUserTransaction();
+            begin(_tx); // we try again to create new transaction
+        }
+        _txcontext = TransactionManager.getTransactionManager().currentTransaction();
+        _active = true;
+    }
+
+    public void commit() throws SecurityException, UnknownTransactionException, SystemException,
+            WrongStateException {
+        _active = false;
+        try {
+            resume();
+            _tx.commit();
+        } catch (TransactionRolledBackException e) {
+            __log.info("Web service transaction was aborted");
+        } finally {
+            _tx = null;
+            _txcontext = null;
+        }
+    }
+
+    public boolean isActive() {
+        return _tx != null && _active;
+    }
+
+    public String getTransactionIdentifier() {
+        return _tx.transactionIdentifier();
+    }
+
+    public void rollback() throws SecurityException, UnknownTransactionException, SystemException,
+            WrongStateException {
+        _active = false;
+        try{
+            resume();
+            _tx.rollback();
+        } finally {
+            _tx = null;
+            _txcontext = null;
+        }
+    }
+
+    public void resume() throws UnknownTransactionException, SystemException {
+        if (!_txcontext.equals(TransactionManager.getTransactionManager().currentTransaction())) {
+            TransactionManager.getTransactionManager().resume(_txcontext);
+            _tx = UserTransaction.getUserTransaction();
+            __log.info("Transaction " + _tx.transactionIdentifier() + " resumed.");
+        }
+    }
+
+    public void suspend() throws SystemException {
+        _txcontext = TransactionManager.getTransactionManager().suspend();
+        __log.info("Transaction suspended.");
+    }
+
+    public Element putCoordinationContext(Element headerElement) throws UnknownTransactionException, SystemException {
+        __log.info("Context with ID " + _tx.transactionIdentifier());
+        resume();
+        final TxContextImple txContext = (TxContextImple) _txcontext;
+        CoordinationContextType ctx = txContext.context().getCoordinationContext();
+        try {
+            Document doc = headerElement.getOwnerDocument();
+            Element coord = doc.createElementNS(CoordinationConstants.WSCOOR_NAMESPACE,
+                    CoordinationConstants.WSCOOR_ELEMENT_COORDINATION_CONTEXT);
+            headerElement.appendChild(coord);
+            CoordinationContextHelper.serialise(ctx, headerElement);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new SystemException("Coordination context has not been added to header.");
+        }
+        return headerElement;
+    }
 
 }
