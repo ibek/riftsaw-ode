@@ -2,6 +2,7 @@ package org.apache.ode.bpel.wstx;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.ode.bpel.iapi.Message;
 import org.oasis_open.docs.ws_tx.wscoor._2006._06.CoordinationContextType;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -26,7 +27,7 @@ public class BusinessActivity implements WebServiceTransaction {
         active = false;
     }
 
-    public void begin() throws WrongStateException, SystemException {
+    public void begin(Message bpelRequest) throws WrongStateException, SystemException {
         _uba = UserBusinessActivity.getUserBusinessActivity();
         if (_uba == null)
             throw new SystemException(

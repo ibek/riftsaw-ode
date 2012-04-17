@@ -93,6 +93,7 @@ import org.apache.ode.bpel.runtime.channels.TimerResponseChannel;
 import org.apache.ode.bpel.wstx.AtomicTransaction;
 import org.apache.ode.bpel.wstx.BusinessActivity;
 import org.apache.ode.bpel.wstx.WebServiceTransaction;
+import org.apache.ode.bpel.wstx.WebServiceTransactionFactory;
 import org.apache.ode.dao.bpel.CorrelationSetDAO;
 import org.apache.ode.dao.bpel.CorrelatorDAO;
 import org.apache.ode.dao.bpel.MessageDAO;
@@ -259,8 +260,7 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
                     try{
                         _wst.rollback();
                     }catch (Exception e) {
-                        __log.error("Web service transaction wasn't properly aborted or it is already rolled back.");
-                        e.printStackTrace();
+                        __log.warn("Web service transaction wasn't properly aborted or it is already rolled back.");
                     }finally{
                         _bpelProcess.removeWebServiceTransaction(_dao.getInstanceId());
                     }
@@ -298,8 +298,7 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
                     try{
                         _wst.commit();
                     }catch (Exception e) {
-                        __log.error("Web service transaction wasn't commited or it is already commited.");
-                        e.printStackTrace();
+                        __log.warn("Web service transaction wasn't commited or it is already commited.");
                     }finally{
                         _bpelProcess.removeWebServiceTransaction(_dao.getInstanceId());
                     }
@@ -741,8 +740,7 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
                     try{
                         _wst.rollback();
                     }catch (Exception e) {
-                        __log.error("Web service transaction wasn't properly aborted or it is already rolled back.");
-                        e.printStackTrace();
+                        __log.warn("Web service transaction wasn't properly aborted or it is already rolled back.");
                     }finally{
                         _bpelProcess.removeWebServiceTransaction(_dao.getInstanceId());
                     }
@@ -869,33 +867,32 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
         if (getConfigForPartnerLink(partnerLink.partnerLink).usePeer2Peer && partnerEndpoint != null)
             p2pProcesses = _bpelProcess.getEngine().route(partnerEndpoint.serviceName, mex.getRequest());
 
-        if(_wst == null || !_wst.isActive()){
-          // Creating a distributed transaction if the operation has an AtomicTransaction or BusinessActivity assertion
-            try{
-                _wst = checkWSTAssertion(operation, _bpelProcess.getConf().getDefinitionForService(partnerEndpoint.serviceName).getBindings().values());
-                if(_wst != null){
-                    __log.debug("Creating distributed transaction ...");
-                    try{
-                        _wst.begin();
-                        _bpelProcess.setWebServiceTransaction(_dao.getInstanceId(), _wst);
-                        __log.debug("Distributed transaction has been created with id = " + _wst.getTransactionIdentifier());
-                    }catch (Exception e) {
-                        e.printStackTrace();
-                        __log.error("Error while creating distributed transaction. " + e.getMessage());
-                    }
+        int wstType = getTypeOfWSTAssertion(operation, _bpelProcess.getConf().getDefinitionForService(partnerEndpoint.serviceName).getBindings().values());
+        
+        if((_wst == null || !_wst.isActive()) && wstType != WebServiceTransaction.NOT_DETERMINED){
+            // Creating a distributed transaction if the operation has an AtomicTransaction or BusinessActivity assertion
+            __log.debug("Creating distributed transaction ...");
+            _wst = WebServiceTransactionFactory.instance(wstType);
+            if(_wst != null){
+                try{
+                    _wst.begin(_instantiatingMessageExchange.getRequest());
+                    _bpelProcess.setWebServiceTransaction(_dao.getInstanceId(), _wst);
+                    __log.debug("Distributed transaction has been created with id = " + _wst.getTransactionIdentifier());
+                }catch (Exception e) {
+                    __log.error("Error while creating distributed transaction. " + e.getMessage());
+                    mex.setFailure(FailureType.OTHER, "Web Service Transaction error while creating the transaction.", null);
                 }
-            }catch(Exception ex){
-                ex.printStackTrace();
             }
         }
 
-        if(_wst != null && _wst.isActive()){
+        if(_wst != null && _wst.isActive() && wstType != WebServiceTransaction.NOT_DETERMINED){
             try{
                 Element headerElement = message.getHeader();
                 headerElement = _wst.putCoordinationContext(headerElement);
                 message.setHeader(headerElement);
             }catch (Exception e) {
-                e.printStackTrace();
+                __log.error("Cannot put transaction context into message header. " + e.getMessage());
+                mex.setFailure(FailureType.OTHER, "Cannot put transaction context into message header.", null);
             }
         }
 
@@ -981,7 +978,7 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
     }
     
     @SuppressWarnings("unchecked")
-    private WebServiceTransaction checkWSTAssertion(Operation operation, Collection<Binding> bindings){
+    private int getTypeOfWSTAssertion(Operation operation, Collection<Binding> bindings){
         Iterator<Binding> i = bindings.iterator();
         while(i.hasNext()){
             Binding b = i.next();
@@ -1003,24 +1000,24 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
                             if (refUri != null && refUri.equals(uri)) {
                                 NodeList nlist = element.getElementsByTagNameNS("http://docs.oasis-open.org/ws-tx/wsat/2006/06","ATAssertion");
                                 if(nlist!= null && nlist.getLength() == 1){
-                                    return new AtomicTransaction();
+                                    return WebServiceTransaction.ATOMIC_TRANSACTION;
                                 }
                                 nlist = element.getElementsByTagNameNS("http://docs.oasis-open.org/ws-tx/wsba/2006/06","BAAtomicOutcomeAssertion");
                                 if(nlist!= null && nlist.getLength() == 1){
-                                    return new BusinessActivity();
+                                    return WebServiceTransaction.BUSINESS_ACTIVITY_ATOMIC_OUTCOME;
                                 }
                                 nlist = element.getElementsByTagNameNS("http://docs.oasis-open.org/ws-tx/wsba/2006/06","BAMixedOutcomeAssertion");
                                 if(nlist!= null && nlist.getLength() == 1){
-                                    return new BusinessActivity();
+                                    return WebServiceTransaction.BUSINESS_ACTIVITY_MIXED_OUTCOME;
                                 }
-                                return null;
+                                return WebServiceTransaction.NOT_DETERMINED;
                             }
                         }
                     }
                 }
             }
         }
-        return null;
+        return WebServiceTransaction.NOT_DETERMINED;
     }
     
     // enable extensibility

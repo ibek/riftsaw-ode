@@ -2,6 +2,8 @@ package org.apache.ode.bpel.wstx;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.ode.bpel.engine.MessageImpl;
+import org.apache.ode.bpel.iapi.Message;
 import org.oasis_open.docs.ws_tx.wscoor._2006._06.CoordinationContextType;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -37,8 +39,27 @@ public class AtomicTransaction implements WebServiceTransaction {
         tx.begin();
     }
     
-    public void begin() throws WrongStateException, SystemException {
+    public void begin(Message bpelRequest) throws WrongStateException, SystemException {
+        MessageImpl req = (MessageImpl)bpelRequest;
+        boolean subordinate = false;
+        if(req._dao.getHeader() != null){
+            try {
+                CoordinationContextType cct = CoordinationContextHelper.deserialise(req._dao.getHeader());
+                if (cct != null) {
+                    TxContext ctx = new TxContextImple(cct);
+                    TransactionManager.getTransactionManager().resume(ctx);
+                    subordinate = true;
+                }
+            } catch (Exception e) {
+                __log.error("Wrong coordination context, the transaction won't be subordinated.");
+            }
+        }
+        
         _tx = UserTransaction.getUserTransaction();
+        if (subordinate && _tx != null) {
+            _tx = UserTransaction.getUserTransaction().getUserSubordinateTransaction();
+        }
+        
         if (_tx == null)
             throw new SystemException(
                     "Distributed transaction has not been created. Check that JBoss XTS is runnning.");
