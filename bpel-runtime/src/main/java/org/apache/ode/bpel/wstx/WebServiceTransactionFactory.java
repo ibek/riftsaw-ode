@@ -7,9 +7,9 @@ public class WebServiceTransactionFactory {
             case WebServiceTransaction.ATOMIC_TRANSACTION:
                 return new AtomicTransaction();
             case WebServiceTransaction.BUSINESS_ACTIVITY_ATOMIC_OUTCOME:
-                return new BusinessActivity();
+                return new BusinessActivity(WebServiceTransaction.BUSINESS_ACTIVITY_ATOMIC_OUTCOME);
             case WebServiceTransaction.BUSINESS_ACTIVITY_MIXED_OUTCOME:
-                return new BusinessActivity();
+                return new BusinessActivity(WebServiceTransaction.BUSINESS_ACTIVITY_MIXED_OUTCOME);
             default:
                 return null;
         }

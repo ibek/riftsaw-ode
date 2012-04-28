@@ -90,8 +90,6 @@ import org.apache.ode.bpel.runtime.channels.FaultData;
 import org.apache.ode.bpel.runtime.channels.InvokeResponseChannel;
 import org.apache.ode.bpel.runtime.channels.PickResponseChannel;
 import org.apache.ode.bpel.runtime.channels.TimerResponseChannel;
-import org.apache.ode.bpel.wstx.AtomicTransaction;
-import org.apache.ode.bpel.wstx.BusinessActivity;
 import org.apache.ode.bpel.wstx.WebServiceTransaction;
 import org.apache.ode.bpel.wstx.WebServiceTransactionFactory;
 import org.apache.ode.dao.bpel.CorrelationSetDAO;
@@ -780,13 +778,13 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
     public void checkInvokeExternalPermission() {}
 
     /**
-     * Called back when the process executes an invokation.
+     * Called back when the process executes an invocation.
      * 
-     * @param activityId The activity id in the process definition (id of OInvoke)
-     * @param partnerLinkInstance The partner link variable instance
+     * @param aid The activity id in the process definition (id of OInvoke)
+     * @param partnerLink The partner link variable instance
      * @param operation The wsdl operation.
-     * @param outboundMsg The message sent outside as a DOM
-     * @param invokeResponseChannel Object called back when the response is received.
+     * @param outgoingMessage The message sent outside as a DOM
+     * @param channel Object called back when the response is received.
      * @return The instance id of the message exchange.
      * @throws FaultException When the response is a fault or when the invoke could not be executed
      * in which case it is one of the bpel standard fault.
@@ -871,28 +869,34 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
         
         if((_wst == null || !_wst.isActive()) && wstType != WebServiceTransaction.NOT_DETERMINED){
             // Creating a distributed transaction if the operation has an AtomicTransaction or BusinessActivity assertion
-            __log.debug("Creating distributed transaction ...");
+            if (BpelProcess.__log.isDebugEnabled()) {
+                __log.debug("Creating distributed transaction ...");
+            }
             _wst = WebServiceTransactionFactory.instance(wstType);
-            if(_wst != null){
-                try{
+            if (_wst != null) {
+                try {
                     _wst.begin(_instantiatingMessageExchange.getRequest());
                     _bpelProcess.setWebServiceTransaction(_dao.getInstanceId(), _wst);
-                    __log.debug("Distributed transaction has been created with id = " + _wst.getTransactionIdentifier());
-                }catch (Exception e) {
-                    __log.error("Error while creating distributed transaction. " + e.getMessage());
-                    mex.setFailure(FailureType.OTHER, "Web Service Transaction error while creating the transaction.", null);
+                    if (BpelProcess.__log.isDebugEnabled()) {
+                        __log.debug("Distributed transaction has been created with id = " + _wst.getTransactionIdentifier());
+                    }
+                } catch (Exception e) {
+                    throw new FaultException(_bpelProcess.getOProcess().constants.qnUnknownFault, "Web Service Transaction error while creating the transaction.", e);
                 }
             }
         }
 
-        if(_wst != null && _wst.isActive() && wstType != WebServiceTransaction.NOT_DETERMINED){
-            try{
-                Element headerElement = message.getHeader();
-                headerElement = _wst.putCoordinationContext(headerElement);
-                message.setHeader(headerElement);
-            }catch (Exception e) {
-                __log.error("Cannot put transaction context into message header. " + e.getMessage());
-                mex.setFailure(FailureType.OTHER, "Cannot put transaction context into message header.", null);
+        if (_wst != null && _wst.isActive() && wstType != WebServiceTransaction.NOT_DETERMINED) {
+            if (wstType != _wst.getType()) {
+                __log.warn("The invocation requires another type of web service transaction. The coordination context won't be sent.");
+            } else {
+                try {
+                    Element headerElement = message.getHeader();
+                    headerElement = _wst.putCoordinationContext(headerElement);
+                    message.setHeader(headerElement);
+                } catch (Exception e) {
+                    throw new FaultException(_bpelProcess.getOProcess().constants.qnUnknownFault, "Cannot put transaction context into message header.", e);
+                }
             }
         }
 
@@ -1114,6 +1118,14 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
                 } catch (ContextException e) {
                     __log.error("Failed to schedule resume task.", e);
                     throw new BpelEngineException(e);
+                }
+            }
+            
+            if (_wst != null && _wst.isActive()) {
+                try {
+                    _wst.complete();
+                } catch (Exception e) {
+                    __log.warn("BusinessActivity partially completion failed.", e);
                 }
             }
             

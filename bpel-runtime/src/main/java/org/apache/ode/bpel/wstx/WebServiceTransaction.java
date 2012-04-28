@@ -24,6 +24,8 @@ public interface WebServiceTransaction {
 
     public void commit() throws SecurityException, UnknownTransactionException, SystemException,
             WrongStateException;
+    
+    public void complete() throws UnknownTransactionException, SystemException, WrongStateException;
 
     public boolean isActive();
 
@@ -31,6 +33,8 @@ public interface WebServiceTransaction {
             WrongStateException;
 
     public String getTransactionIdentifier();
+    
+    public int getType();
 
     public void resume() throws UnknownTransactionException, SystemException;
 

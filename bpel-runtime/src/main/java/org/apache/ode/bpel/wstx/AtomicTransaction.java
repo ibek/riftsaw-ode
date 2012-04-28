@@ -33,7 +33,7 @@ public class AtomicTransaction implements WebServiceTransaction {
 
     /**
      * Begin of transaction must be performed with mutual exclusion in one thread
-     * because the registration service cannot begin more transactions in one time.
+     * because the registration service cannot begin more transactions concurrently.
      */
     private static synchronized void begin(UserTransaction tx) throws WrongStateException, SystemException{
         tx.begin();
@@ -51,7 +51,7 @@ public class AtomicTransaction implements WebServiceTransaction {
                     subordinate = true;
                 }
             } catch (Exception e) {
-                __log.error("Wrong coordination context, the transaction won't be subordinated.");
+                __log.error("Wrong coordination context. The transaction won't be subordinated.");
             }
         }
         
@@ -63,13 +63,7 @@ public class AtomicTransaction implements WebServiceTransaction {
         if (_tx == null)
             throw new SystemException(
                     "Distributed transaction has not been created. Check that JBoss XTS is runnning.");
-        try {
-            begin(_tx);
-        } catch (WrongStateException wse) {
-            TransactionManager.getTransactionManager().suspend(); // previous transaction will be resumed by another instance
-            _tx = UserTransaction.getUserTransaction();
-            begin(_tx); // we try again to create new transaction
-        }
+        begin(_tx);
         _txcontext = TransactionManager.getTransactionManager().currentTransaction();
         _active = true;
     }
@@ -81,11 +75,15 @@ public class AtomicTransaction implements WebServiceTransaction {
             resume();
             _tx.commit();
         } catch (TransactionRolledBackException e) {
-            __log.info("Web service transaction was aborted");
+            __log.debug("Web service transaction was aborted.");
         } finally {
             _tx = null;
             _txcontext = null;
         }
+    }
+    
+    public void complete() throws UnknownTransactionException, SystemException, WrongStateException {
+        // this is atomic transaction, we cannot partially complete the transaction as BusinessActivity can
     }
 
     public boolean isActive() {
@@ -94,6 +92,10 @@ public class AtomicTransaction implements WebServiceTransaction {
 
     public String getTransactionIdentifier() {
         return _tx.transactionIdentifier();
+    }
+    
+    public int getType() {
+        return WebServiceTransaction.ATOMIC_TRANSACTION;
     }
 
     public void rollback() throws SecurityException, UnknownTransactionException, SystemException,
@@ -112,17 +114,14 @@ public class AtomicTransaction implements WebServiceTransaction {
         if (!_txcontext.equals(TransactionManager.getTransactionManager().currentTransaction())) {
             TransactionManager.getTransactionManager().resume(_txcontext);
             _tx = UserTransaction.getUserTransaction();
-            __log.info("Transaction " + _tx.transactionIdentifier() + " resumed.");
         }
     }
 
     public void suspend() throws SystemException {
         _txcontext = TransactionManager.getTransactionManager().suspend();
-        __log.info("Transaction suspended.");
     }
 
     public Element putCoordinationContext(Element headerElement) throws UnknownTransactionException, SystemException {
-        __log.info("Context with ID " + _tx.transactionIdentifier());
         resume();
         final TxContextImple txContext = (TxContextImple) _txcontext;
         CoordinationContextType ctx = txContext.context().getCoordinationContext();
@@ -134,7 +133,7 @@ public class AtomicTransaction implements WebServiceTransaction {
             CoordinationContextHelper.serialise(ctx, headerElement);
         } catch (Exception e) {
             e.printStackTrace();
-            throw new SystemException("Coordination context has not been added to header.");
+            throw new SystemException("Coordination context has not been added to the header.");
         }
         return headerElement;
     }
