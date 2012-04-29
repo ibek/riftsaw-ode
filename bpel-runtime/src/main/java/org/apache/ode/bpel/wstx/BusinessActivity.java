@@ -10,7 +10,9 @@ import org.w3c.dom.Element;
 
 import com.arjuna.mw.wst.TxContext;
 import com.arjuna.mw.wst11.BusinessActivityManager;
+import com.arjuna.mw.wst11.TransactionManager;
 import com.arjuna.mw.wst11.UserBusinessActivity;
+import com.arjuna.mw.wst11.UserTransaction;
 import com.arjuna.mw.wst11.common.CoordinationContextHelper;
 import com.arjuna.mwlabs.wst11.ba.context.TxContextImple;
 import com.arjuna.webservices11.wscoor.CoordinationConstants;
@@ -72,7 +74,13 @@ public class BusinessActivity implements WebServiceTransaction {
         if (_uba == null)
             throw new SystemException(
                     "Distributed transaction has not been created. Check that JBoss XTS is runnning.");
-        begin(_uba);
+        try {
+            begin(_uba);
+        } catch (WrongStateException wse) {
+            BusinessActivityManager.getBusinessActivityManager().suspend(); // previous transaction will be resumed by another instance
+            _uba = UserBusinessActivity.getUserBusinessActivity();
+            begin(_uba); // we try again to create new transaction
+        }
         _txcontext = BusinessActivityManager.getBusinessActivityManager().currentTransaction();
         _active = true;
     }

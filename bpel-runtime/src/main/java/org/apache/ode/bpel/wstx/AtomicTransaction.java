@@ -63,7 +63,13 @@ public class AtomicTransaction implements WebServiceTransaction {
         if (_tx == null)
             throw new SystemException(
                     "Distributed transaction has not been created. Check that JBoss XTS is runnning.");
-        begin(_tx);
+        try {
+            begin(_tx);
+        } catch (WrongStateException wse) {
+            TransactionManager.getTransactionManager().suspend(); // previous transaction will be resumed by another instance
+            _tx = UserTransaction.getUserTransaction();
+            begin(_tx); // we try again to create new transaction
+        }
         _txcontext = TransactionManager.getTransactionManager().currentTransaction();
         _active = true;
     }

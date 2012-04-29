@@ -881,7 +881,7 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
                         __log.debug("Distributed transaction has been created with id = " + _wst.getTransactionIdentifier());
                     }
                 } catch (Exception e) {
-                    throw new FaultException(_bpelProcess.getOProcess().constants.qnUnknownFault, "Web Service Transaction error while creating the transaction.", e);
+                    throw new FaultException(_bpelProcess.getOProcess().constants.qnUnknownFault, "Web Service Transaction error while creating the transaction. "+e.getMessage(), e);
                 }
             }
         }
@@ -895,7 +895,7 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
                     headerElement = _wst.putCoordinationContext(headerElement);
                     message.setHeader(headerElement);
                 } catch (Exception e) {
-                    throw new FaultException(_bpelProcess.getOProcess().constants.qnUnknownFault, "Cannot put transaction context into message header.", e);
+                    throw new FaultException(_bpelProcess.getOProcess().constants.qnUnknownFault, "Cannot put transaction context into message header. "+e.getMessage(), e);
                 }
             }
         }
