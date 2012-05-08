@@ -8,11 +8,6 @@ import com.arjuna.wst.UnknownTransactionException;
 import com.arjuna.wst.WrongStateException;
 
 public interface WebServiceTransaction {
-
-    public static final int NOT_DETERMINED = 0;
-    public static final int ATOMIC_TRANSACTION = 1;
-    public static final int BUSINESS_ACTIVITY_ATOMIC_OUTCOME = 2;
-    public static final int BUSINESS_ACTIVITY_MIXED_OUTCOME = 3;
     
     /**
      * TODO: begin transaction should have specified timeout
@@ -34,7 +29,7 @@ public interface WebServiceTransaction {
 
     public String getTransactionIdentifier();
     
-    public int getType();
+    public WebServiceTransactionType getType();
 
     public void resume() throws UnknownTransactionException, SystemException;
 

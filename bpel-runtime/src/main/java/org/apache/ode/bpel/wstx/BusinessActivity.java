@@ -35,9 +35,9 @@ public class BusinessActivity implements WebServiceTransaction {
     protected UserBusinessActivity _uba;
     protected TxContext _txcontext;
     protected boolean _active;
-    protected int _type;
+    protected WebServiceTransactionType _type;
 
-    public BusinessActivity(int type) {
+    public BusinessActivity(WebServiceTransactionType type) {
         _type = type;
         _active = false;
     }
@@ -123,7 +123,7 @@ public class BusinessActivity implements WebServiceTransaction {
         return _uba.transactionIdentifier();
     }
     
-    public int getType() {
+    public WebServiceTransactionType getType() {
         return _type;
     }
 

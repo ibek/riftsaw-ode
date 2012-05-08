@@ -92,6 +92,7 @@ import org.apache.ode.bpel.runtime.channels.PickResponseChannel;
 import org.apache.ode.bpel.runtime.channels.TimerResponseChannel;
 import org.apache.ode.bpel.wstx.WebServiceTransaction;
 import org.apache.ode.bpel.wstx.WebServiceTransactionFactory;
+import org.apache.ode.bpel.wstx.WebServiceTransactionType;
 import org.apache.ode.dao.bpel.CorrelationSetDAO;
 import org.apache.ode.dao.bpel.CorrelatorDAO;
 import org.apache.ode.dao.bpel.MessageDAO;
@@ -865,9 +866,9 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
         if (getConfigForPartnerLink(partnerLink.partnerLink).usePeer2Peer && partnerEndpoint != null)
             p2pProcesses = _bpelProcess.getEngine().route(partnerEndpoint.serviceName, mex.getRequest());
 
-        int wstType = getTypeOfWSTAssertion(operation, _bpelProcess.getConf().getDefinitionForService(partnerEndpoint.serviceName).getBindings().values());
+        WebServiceTransactionType wstType = getTypeOfWSTAssertion(operation, _bpelProcess.getConf().getDefinitionForService(partnerEndpoint.serviceName).getBindings().values());
         
-        if((_wst == null || !_wst.isActive()) && wstType != WebServiceTransaction.NOT_DETERMINED){
+        if((_wst == null || !_wst.isActive()) && wstType != WebServiceTransactionType.NOT_DETERMINED){
             // Creating a distributed transaction if the operation has an AtomicTransaction or BusinessActivity assertion
             if (BpelProcess.__log.isDebugEnabled()) {
                 __log.debug("Creating distributed transaction ...");
@@ -886,7 +887,7 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
             }
         }
 
-        if (_wst != null && _wst.isActive() && wstType != WebServiceTransaction.NOT_DETERMINED) {
+        if (_wst != null && _wst.isActive() && wstType != WebServiceTransactionType.NOT_DETERMINED) {
             if (wstType != _wst.getType()) {
                 __log.warn("The invocation requires another type of web service transaction. The coordination context won't be sent.");
             } else {
@@ -982,7 +983,7 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
     }
     
     @SuppressWarnings("unchecked")
-    private int getTypeOfWSTAssertion(Operation operation, Collection<Binding> bindings){
+    private WebServiceTransactionType getTypeOfWSTAssertion(Operation operation, Collection<Binding> bindings){
         Iterator<Binding> i = bindings.iterator();
         while(i.hasNext()){
             Binding b = i.next();
@@ -1004,24 +1005,24 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
                             if (refUri != null && refUri.equals(uri)) {
                                 NodeList nlist = element.getElementsByTagNameNS("http://docs.oasis-open.org/ws-tx/wsat/2006/06","ATAssertion");
                                 if(nlist!= null && nlist.getLength() == 1){
-                                    return WebServiceTransaction.ATOMIC_TRANSACTION;
+                                    return WebServiceTransactionType.ATOMIC_TRANSACTION;
                                 }
                                 nlist = element.getElementsByTagNameNS("http://docs.oasis-open.org/ws-tx/wsba/2006/06","BAAtomicOutcomeAssertion");
                                 if(nlist!= null && nlist.getLength() == 1){
-                                    return WebServiceTransaction.BUSINESS_ACTIVITY_ATOMIC_OUTCOME;
+                                    return WebServiceTransactionType.BUSINESS_ACTIVITY_ATOMIC_OUTCOME;
                                 }
                                 nlist = element.getElementsByTagNameNS("http://docs.oasis-open.org/ws-tx/wsba/2006/06","BAMixedOutcomeAssertion");
                                 if(nlist!= null && nlist.getLength() == 1){
-                                    return WebServiceTransaction.BUSINESS_ACTIVITY_MIXED_OUTCOME;
+                                    return WebServiceTransactionType.BUSINESS_ACTIVITY_MIXED_OUTCOME;
                                 }
-                                return WebServiceTransaction.NOT_DETERMINED;
+                                return WebServiceTransactionType.NOT_DETERMINED;
                             }
                         }
                     }
                 }
             }
         }
-        return WebServiceTransaction.NOT_DETERMINED;
+        return WebServiceTransactionType.NOT_DETERMINED;
     }
     
     // enable extensibility

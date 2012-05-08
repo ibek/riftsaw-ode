@@ -100,8 +100,8 @@ public class AtomicTransaction implements WebServiceTransaction {
         return _tx.transactionIdentifier();
     }
     
-    public int getType() {
-        return WebServiceTransaction.ATOMIC_TRANSACTION;
+    public WebServiceTransactionType getType() {
+        return WebServiceTransactionType.ATOMIC_TRANSACTION;
     }
 
     public void rollback() throws SecurityException, UnknownTransactionException, SystemException,
