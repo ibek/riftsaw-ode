@@ -255,12 +255,12 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
             public void afterCompletion(boolean success) {
             }
             public void beforeCompletion() {
-                if(_wst != null && _wst.isActive()){
-                    try{
+                if (_wst != null && _wst.isActive() && !_wst.isSubordinate()) {
+                    try {
                         _wst.rollback();
-                    }catch (Exception e) {
+                    } catch (Exception e) {
                         __log.warn("Web service transaction wasn't properly aborted or it is already rolled back.");
-                    }finally{
+                    } finally {
                         _bpelProcess.removeWebServiceTransaction(_dao.getInstanceId());
                     }
                 }
@@ -293,12 +293,12 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
             public void afterCompletion(boolean success) {
             }
             public void beforeCompletion() {
-                if (_wst != null && _wst.isActive()) {
-                    try{
+                if (_wst != null && _wst.isActive() && !_wst.isSubordinate()) {
+                    try {
                         _wst.commit();
-                    }catch (Exception e) {
+                    } catch (Exception e) {
                         __log.warn("Web service transaction wasn't commited or it is already commited.");
-                    }finally{
+                    } finally {
                         _bpelProcess.removeWebServiceTransaction(_dao.getInstanceId());
                     }
                 }
@@ -735,12 +735,12 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
             public void afterCompletion(boolean success) {
             }
             public void beforeCompletion() {
-                if(_wst != null && _wst.isActive()){
-                    try{
+                if (_wst != null && _wst.isActive() && !_wst.isSubordinate()) {
+                    try {
                         _wst.rollback();
-                    }catch (Exception e) {
+                    } catch (Exception e) {
                         __log.warn("Web service transaction wasn't properly aborted or it is already rolled back.");
-                    }finally{
+                    } finally {
                         _bpelProcess.removeWebServiceTransaction(_dao.getInstanceId());
                     }
                 }
@@ -868,7 +868,7 @@ public class BpelRuntimeContextImpl implements BpelRuntimeContext {
 
         WebServiceTransactionType wstType = getTypeOfWSTAssertion(operation, _bpelProcess.getConf().getDefinitionForService(partnerEndpoint.serviceName).getBindings().values());
         
-        if((_wst == null || !_wst.isActive()) && wstType != WebServiceTransactionType.NOT_DETERMINED){
+        if ((_wst == null || !_wst.isActive()) && wstType != WebServiceTransactionType.NOT_DETERMINED) {
             // Creating a distributed transaction if the operation has an AtomicTransaction or BusinessActivity assertion
             if (BpelProcess.__log.isDebugEnabled()) {
                 __log.debug("Creating distributed transaction ...");

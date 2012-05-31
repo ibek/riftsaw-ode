@@ -7,6 +7,7 @@ import org.apache.ode.bpel.iapi.Message;
 import org.oasis_open.docs.ws_tx.wscoor._2006._06.CoordinationContextType;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
 import com.arjuna.mw.wst.TxContext;
 import com.arjuna.mw.wst11.BusinessActivityManager;
@@ -36,10 +37,12 @@ public class BusinessActivity implements WebServiceTransaction {
     protected TxContext _txcontext;
     protected boolean _active;
     protected WebServiceTransactionType _type;
+    protected boolean _subordinate;
 
     public BusinessActivity(WebServiceTransactionType type) {
         _type = type;
         _active = false;
+        _subordinate = false;
     }
 
     /**
@@ -51,15 +54,19 @@ public class BusinessActivity implements WebServiceTransaction {
     }
 
     public void begin(Message bpelRequest) throws WrongStateException, SystemException {
-				MessageImpl req = (MessageImpl)bpelRequest;
-				boolean subordinate = false;
+		MessageImpl req = (MessageImpl)bpelRequest;
+		_subordinate = false;
         if(req._dao.getHeader() != null){
             try {
-                CoordinationContextType cct = CoordinationContextHelper.deserialise(req._dao.getHeader());
-                if (cct != null) {
-                    TxContext ctx = new TxContextImple(cct);
-                    BusinessActivityManager.getBusinessActivityManager().resume(ctx);
-                    subordinate = true;
+                NodeList cc = req._dao.getHeader().getElementsByTagNameNS(CoordinationConstants.WSCOOR_NAMESPACE, 
+                        CoordinationConstants.WSCOOR_ELEMENT_COORDINATION_CONTEXT);
+                if (cc.getLength() > 0){
+                    CoordinationContextType cct = CoordinationContextHelper.deserialise((Element)cc.item(0));
+                    if (cct != null) {
+                        TxContext ctx = new TxContextImple(cct);
+                        BusinessActivityManager.getBusinessActivityManager().resume(ctx);
+                        _subordinate = true;
+                    }
                 }
             } catch (Exception e) {
                 __log.warn("Wrong coordination context. The transaction won't be subordinated.");
@@ -67,7 +74,7 @@ public class BusinessActivity implements WebServiceTransaction {
         }
 
         _uba = UserBusinessActivity.getUserBusinessActivity();
-				if (subordinate && _uba != null) {
+				if (_subordinate && _uba != null) {
             _uba = UserBusinessActivity.getUserBusinessActivity().getUserSubordinateBusinessActivity();
         }
 
@@ -105,6 +112,10 @@ public class BusinessActivity implements WebServiceTransaction {
 
     public boolean isActive() {
         return _uba != null && _active;
+    }
+    
+    public boolean isSubordinate() {
+        return _subordinate;
     }
 
     public void rollback() throws SecurityException, UnknownTransactionException, SystemException,

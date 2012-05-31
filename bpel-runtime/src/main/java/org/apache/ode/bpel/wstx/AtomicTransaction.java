@@ -7,6 +7,7 @@ import org.apache.ode.bpel.iapi.Message;
 import org.oasis_open.docs.ws_tx.wscoor._2006._06.CoordinationContextType;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
 import com.arjuna.mw.wst.TxContext;
 import com.arjuna.mw.wst11.TransactionManager;
@@ -19,6 +20,11 @@ import com.arjuna.wst.TransactionRolledBackException;
 import com.arjuna.wst.UnknownTransactionException;
 import com.arjuna.wst.WrongStateException;
 
+/**
+ * 
+ * @author ibek
+ *
+ */
 public class AtomicTransaction implements WebServiceTransaction {
 
     private static final Log __log = LogFactory.getLog(AtomicTransaction.class);
@@ -26,9 +32,11 @@ public class AtomicTransaction implements WebServiceTransaction {
     protected UserTransaction _tx;
     protected TxContext _txcontext;
     protected boolean _active;
+    protected boolean _subordinate;
 
     public AtomicTransaction() {
         _active = false;
+        _subordinate = false;
     }
 
     /**
@@ -41,14 +49,18 @@ public class AtomicTransaction implements WebServiceTransaction {
     
     public void begin(Message bpelRequest) throws WrongStateException, SystemException {
         MessageImpl req = (MessageImpl)bpelRequest;
-        boolean subordinate = false;
+        _subordinate = false;
         if(req._dao.getHeader() != null){
             try {
-                CoordinationContextType cct = CoordinationContextHelper.deserialise(req._dao.getHeader());
-                if (cct != null) {
-                    TxContext ctx = new TxContextImple(cct);
-                    TransactionManager.getTransactionManager().resume(ctx);
-                    subordinate = true;
+                NodeList cc = req._dao.getHeader().getElementsByTagNameNS(CoordinationConstants.WSCOOR_NAMESPACE, 
+                        CoordinationConstants.WSCOOR_ELEMENT_COORDINATION_CONTEXT);
+                if (cc.getLength() > 0){
+                    CoordinationContextType cct = CoordinationContextHelper.deserialise((Element)cc.item(0));
+                    if (cct != null) {
+                        TxContext ctx = new TxContextImple(cct);
+                        TransactionManager.getTransactionManager().resume(ctx);
+                        _subordinate = true;
+                    }
                 }
             } catch (Exception e) {
                 __log.error("Wrong coordination context. The transaction won't be subordinated.");
@@ -56,7 +68,7 @@ public class AtomicTransaction implements WebServiceTransaction {
         }
         
         _tx = UserTransaction.getUserTransaction();
-        if (subordinate && _tx != null) {
+        if (_subordinate && _tx != null) {
             _tx = UserTransaction.getUserTransaction().getUserSubordinateTransaction();
         }
         
@@ -94,6 +106,10 @@ public class AtomicTransaction implements WebServiceTransaction {
 
     public boolean isActive() {
         return _tx != null && _active;
+    }
+    
+    public boolean isSubordinate() {
+        return _subordinate;
     }
 
     public String getTransactionIdentifier() {

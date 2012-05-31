@@ -7,6 +7,11 @@ import com.arjuna.wst.SystemException;
 import com.arjuna.wst.UnknownTransactionException;
 import com.arjuna.wst.WrongStateException;
 
+/**
+ * 
+ * @author ibek
+ *
+ */
 public interface WebServiceTransaction {
     
     /**
@@ -23,6 +28,8 @@ public interface WebServiceTransaction {
     public void complete() throws UnknownTransactionException, SystemException, WrongStateException;
 
     public boolean isActive();
+    
+    public boolean isSubordinate();
 
     public void rollback() throws SecurityException, UnknownTransactionException, SystemException,
             WrongStateException;
